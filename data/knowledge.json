@@ -1,0 +1,130 @@
+{
+  "glossary": {
+    "products": {
+      "Chequing Account": "Everyday transaction account for deposits, withdrawals, bill payments",
+      "Savings Account": "Interest-bearing account for saving money",
+      "GIC": "Guaranteed Investment Certificate - term deposit with fixed interest rate and maturity date"
+    },
+    "terms": {
+      "Net Flow": "Deposits minus withdrawals (can be negative)",
+      "Active Customer": "Customer with at least one event in the period",
+      "Digital Adoption": "Percentage of transactions via DIGITAL channel"
+    }
+  },
+  "metrics": {
+    "volume": [
+      {
+        "name": "Total Deposits",
+        "definition": "Sum of positive money movements",
+        "sql": "SUM(event_amount) FILTER (WHERE event_amount > 0 AND event_type = 'money_movement')"
+      },
+      {
+        "name": "Total Withdrawals",
+        "definition": "Sum of negative money movements (absolute value)",
+        "sql": "ABS(SUM(event_amount) FILTER (WHERE event_amount < 0 AND event_type = 'money_movement'))"
+      },
+      {
+        "name": "Net Flow",
+        "definition": "Deposits minus withdrawals",
+        "sql": "SUM(event_amount) FILTER (WHERE event_type = 'money_movement')"
+      },
+      {
+        "name": "Transaction Count",
+        "definition": "Number of money movement events",
+        "sql": "COUNT(*) FILTER (WHERE event_type = 'money_movement')"
+      }
+    ],
+    "customer": [
+      {
+        "name": "Active Customers",
+        "definition": "Customers with at least one event in period",
+        "sql": "COUNT(DISTINCT customer_id)"
+      },
+      {
+        "name": "Avg Transactions per Customer",
+        "definition": "Average number of transactions per customer",
+        "sql": "COUNT(*) FILTER (WHERE event_type = 'money_movement') / COUNT(DISTINCT customer_id)"
+      }
+    ],
+    "channel": [
+      {
+        "name": "Digital Adoption Rate",
+        "definition": "Percentage of transactions via DIGITAL channel",
+        "sql": "100.0 * COUNT(*) FILTER (WHERE channel = 'DIGITAL') / COUNT(*)"
+      }
+    ],
+    "fee": [
+      {
+        "name": "Total Fees Collected",
+        "definition": "Sum of fee events (absolute value)",
+        "sql": "ABS(SUM(event_amount) FILTER (WHERE event_type = 'fee'))"
+      },
+      {
+        "name": "Fee Events Count",
+        "definition": "Number of fee events",
+        "sql": "COUNT(*) FILTER (WHERE event_type = 'fee')"
+      }
+    ]
+  },
+  "sql_patterns": {
+    "daily_summary": {
+      "description": "Daily aggregation of deposits and withdrawals",
+      "sql": "SELECT event_date, COUNT(*) as event_count, SUM(CASE WHEN event_amount > 0 THEN event_amount ELSE 0 END) as deposits, ABS(SUM(CASE WHEN event_amount < 0 THEN event_amount ELSE 0 END)) as withdrawals FROM sample_events WHERE event_type = 'money_movement' GROUP BY event_date ORDER BY event_date"
+    },
+    "product_mix": {
+      "description": "Breakdown by product type",
+      "sql": "SELECT product_type, COUNT(DISTINCT account_id) as accounts, COUNT(*) as events, SUM(event_amount) as net_flow FROM sample_events GROUP BY product_type"
+    },
+    "channel_analysis": {
+      "description": "Transaction distribution by channel",
+      "sql": "SELECT channel, COUNT(*) as transactions, ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 2) as pct FROM sample_events WHERE event_type = 'money_movement' GROUP BY channel ORDER BY transactions DESC"
+    },
+    "top_customers": {
+      "description": "Most active customers by transaction count",
+      "sql": "SELECT customer_id, COUNT(*) as event_count, SUM(event_amount) as net_flow FROM sample_events WHERE event_type = 'money_movement' GROUP BY customer_id ORDER BY event_count DESC LIMIT 10"
+    }
+  },
+  "business_rules": [
+    "Withdrawals are negative: event_amount < 0 means money leaving the account",
+    "Balance is post-event: balance_after reflects the balance AFTER the event is applied",
+    "One customer, multiple accounts: A customer_id can have multiple account_ids",
+    "Event types are mutually exclusive: Each event has exactly one event_type"
+  ],
+  "question_mapping": [
+    {
+      "question_pattern": "How much money was deposited?",
+      "key_filters": "event_amount > 0 AND event_type = 'money_movement'",
+      "aggregation": "SUM(event_amount)"
+    },
+    {
+      "question_pattern": "What's the transaction volume?",
+      "key_filters": "event_type = 'money_movement'",
+      "aggregation": "COUNT(*)"
+    },
+    {
+      "question_pattern": "Show me the channel breakdown",
+      "key_filters": null,
+      "aggregation": "GROUP BY channel"
+    },
+    {
+      "question_pattern": "Which customers are most active?",
+      "key_filters": null,
+      "aggregation": "GROUP BY customer_id ORDER BY COUNT(*) DESC"
+    },
+    {
+      "question_pattern": "What fees were charged?",
+      "key_filters": "event_type = 'fee'",
+      "aggregation": "SUM(event_amount)"
+    },
+    {
+      "question_pattern": "How many accounts were opened?",
+      "key_filters": "event_name = 'account_opened'",
+      "aggregation": "COUNT(*)"
+    },
+    {
+      "question_pattern": "Daily trend of deposits",
+      "key_filters": "event_amount > 0 AND event_type = 'money_movement'",
+      "aggregation": "GROUP BY event_date ORDER BY event_date"
+    }
+  ]
+}

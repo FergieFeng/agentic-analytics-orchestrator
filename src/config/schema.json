@@ -1,0 +1,94 @@
+{
+  "table": "sample_events",
+  "source": "data/sample_events.csv",
+  "description": "Banking transaction events including deposits, withdrawals, payments, and transfers",
+  "columns": [
+    {
+      "name": "event_id",
+      "type": "STRING",
+      "description": "Unique identifier for each event"
+    },
+    {
+      "name": "event_ts",
+      "type": "TIMESTAMP",
+      "description": "Event timestamp (datetime)"
+    },
+    {
+      "name": "event_date",
+      "type": "DATE",
+      "description": "Event date (partition key)"
+    },
+    {
+      "name": "account_id",
+      "type": "STRING",
+      "description": "Account identifier"
+    },
+    {
+      "name": "customer_id",
+      "type": "STRING",
+      "description": "Customer identifier"
+    },
+    {
+      "name": "product_type",
+      "type": "STRING",
+      "description": "Account product type",
+      "values": ["CHEQUING", "SAVINGS"]
+    },
+    {
+      "name": "event_type",
+      "type": "STRING",
+      "description": "High-level event category",
+      "values": ["money_movement"]
+    },
+    {
+      "name": "event_name",
+      "type": "STRING",
+      "description": "Specific event action",
+      "values": ["deposit", "withdrawal", "payment", "transfer_in", "transfer_out"]
+    },
+    {
+      "name": "channel",
+      "type": "STRING",
+      "description": "Transaction channel",
+      "values": ["DIGITAL", "BRANCH"]
+    },
+    {
+      "name": "event_amount",
+      "type": "NUMERIC",
+      "description": "Transaction amount (positive for inflows, negative for outflows)"
+    },
+    {
+      "name": "currency",
+      "type": "STRING",
+      "description": "Currency code",
+      "values": ["CAD"]
+    },
+    {
+      "name": "balance_after",
+      "type": "NUMERIC",
+      "description": "Account balance after the transaction"
+    }
+  ],
+  "metrics": [
+    {
+      "name": "total_deposits",
+      "description": "Sum of positive event_amount (inflows)",
+      "sql": "SUM(CASE WHEN event_amount > 0 THEN event_amount ELSE 0 END)"
+    },
+    {
+      "name": "total_withdrawals",
+      "description": "Sum of negative event_amount (outflows)",
+      "sql": "SUM(CASE WHEN event_amount < 0 THEN ABS(event_amount) ELSE 0 END)"
+    },
+    {
+      "name": "transaction_count",
+      "description": "Count of events",
+      "sql": "COUNT(*)"
+    },
+    {
+      "name": "unique_customers",
+      "description": "Count of distinct customers",
+      "sql": "COUNT(DISTINCT customer_id)"
+    }
+  ]
+}

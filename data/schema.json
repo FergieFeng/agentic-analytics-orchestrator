@@ -1,0 +1,104 @@
+{
+  "table_name": "sample_events",
+  "description": "Event-level transactional data for banking products",
+  "columns": [
+    {
+      "name": "event_id",
+      "type": "STRING",
+      "description": "Unique event identifier"
+    },
+    {
+      "name": "event_ts",
+      "type": "TIMESTAMP",
+      "description": "Event timestamp"
+    },
+    {
+      "name": "event_date",
+      "type": "DATE",
+      "description": "Partition date = DATE(event_ts)"
+    },
+    {
+      "name": "account_id",
+      "type": "STRING",
+      "description": "Deposit account identifier (masked)"
+    },
+    {
+      "name": "customer_id",
+      "type": "STRING",
+      "description": "Customer identifier (masked)"
+    },
+    {
+      "name": "product_type",
+      "type": "STRING",
+      "description": "Account product type",
+      "enum": ["CHEQUING", "SAVINGS", "GIC"]
+    },
+    {
+      "name": "event_type",
+      "type": "STRING",
+      "description": "Event category",
+      "enum": ["money_movement", "interest", "fee", "account_status", "gic_lifecycle", "service_action"]
+    },
+    {
+      "name": "event_name",
+      "type": "STRING",
+      "description": "Detailed action name"
+    },
+    {
+      "name": "channel",
+      "type": "STRING",
+      "description": "Transaction channel",
+      "enum": ["DIGITAL", "BRANCH", "CALL_CENTER", "BATCH"]
+    },
+    {
+      "name": "event_amount",
+      "type": "NUMERIC",
+      "description": "Amount for money/interest/fee events; NULL otherwise",
+      "nullable": true
+    },
+    {
+      "name": "currency",
+      "type": "STRING",
+      "description": "Currency code (e.g., CAD)"
+    },
+    {
+      "name": "balance_after",
+      "type": "NUMERIC",
+      "description": "Account balance after the event",
+      "nullable": true
+    }
+  ],
+  "enums": {
+    "product_type": {
+      "CHEQUING": "Chequing account (everyday transactions)",
+      "SAVINGS": "Savings account (interest-bearing)",
+      "GIC": "Guaranteed Investment Certificate (term deposit)"
+    },
+    "event_type": {
+      "money_movement": "Deposits, withdrawals, transfers, payments",
+      "interest": "Interest posted or accrued",
+      "fee": "Monthly fees, service charges",
+      "account_status": "Account opened, closed, frozen, unfrozen",
+      "gic_lifecycle": "GIC created, matured, renewed",
+      "service_action": "Profile updates, card requests, etc."
+    },
+    "event_name": {
+      "money_movement": ["deposit", "withdrawal", "transfer_in", "transfer_out", "payment", "e_transfer_in", "e_transfer_out"],
+      "interest": ["interest_posted"],
+      "fee": ["monthly_fee", "overdraft_fee"],
+      "account_status": ["account_opened", "account_closed", "frozen", "unfrozen"],
+      "gic_lifecycle": ["gic_created", "gic_matured", "gic_renewed"]
+    },
+    "channel": {
+      "DIGITAL": "Online banking, mobile app",
+      "BRANCH": "In-person at branch",
+      "CALL_CENTER": "Phone banking",
+      "BATCH": "Automated/scheduled processes"
+    }
+  },
+  "notes": [
+    "Negative amounts: Withdrawals and payments have negative event_amount",
+    "NULL amounts: Non-monetary events (account_status, some service_actions) have NULL event_amount",
+    "One row per event: Each row is a single event; one transaction may generate multiple events"
+  ]
+}
