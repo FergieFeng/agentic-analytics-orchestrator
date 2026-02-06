@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific generated files
+data/chroma_db/
+data/query_logs.db
+logs/
+*.db

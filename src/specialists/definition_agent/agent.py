@@ -1,84 +1,28 @@
 """
 Definition Agent: Interprets metrics, dimensions, and analytical intent.
 
+Uses RAG to retrieve relevant business glossary and metric definitions
+before interpreting user questions.
+
 Responsibilities:
 - Parse user questions to identify requested metrics
-- Map business terms to table columns
+- Map business terms to table columns using RAG-retrieved context
 - Clarify ambiguous requests
+- Flag privacy concerns early
 """
 
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from pathlib import Path
 
 from src.config.llm import get_llm_client
-from src.tools.schema_tool import get_schema_context, get_metrics_context, load_knowledge
-
-
-SYSTEM_PROMPT = """You are the Definition Agent for a banking analytics system.
-
-Your job is to interpret user questions and extract structured analytical definitions.
-
-{schema_context}
-
-{metrics_context}
-
-## Your Task
-
-Given a user question, extract:
-1. **metric**: What to measure (e.g., SUM of event_amount, COUNT of events)
-2. **dimensions**: How to group results (e.g., by channel, by month)
-3. **filters**: Conditions to apply (e.g., only deposits, specific date range)
-4. **time_range**: Date constraints if mentioned
-5. **interpretation**: Plain English summary of what the user wants
-
-## Output Format
-
-Return a JSON object:
-```json
-{{
-  "metric": {{
-    "function": "SUM|COUNT|AVG|MIN|MAX",
-    "column": "column_name",
-    "alias": "result_name"
-  }},
-  "dimensions": ["column1", "column2"],
-  "filters": [
-    {{"column": "col", "operator": "=|>|<|>=|<=|IN|LIKE", "value": "val"}}
-  ],
-  "time_range": {{
-    "start": "YYYY-MM-DD or null",
-    "end": "YYYY-MM-DD or null",
-    "period": "last_month|this_month|last_week|etc or null"
-  }},
-  "interpretation": "Plain English description"
-}}
-```
-
-## Important Rules
-
-1. Map business terms to correct columns:
-   - "deposits" → event_amount > 0 AND event_type = 'money_movement'
-   - "withdrawals" → event_amount < 0 AND event_type = 'money_movement'
-   - "fees" → event_type = 'fee'
-   - "transactions" → event_type = 'money_movement'
-
-2. For time-based questions without specific dates, use relative periods
-3. Always include an interpretation that explains your understanding
-4. If the question is ambiguous, make reasonable assumptions and note them"""
-
-
-def load_prompt() -> str:
-    """Load the prompt template from prompt.md."""
-    prompt_path = Path(__file__).parent / "prompt.md"
-    if prompt_path.exists():
-        return prompt_path.read_text()
-    return ""
+from src.config.prompts import AgentPrompts
+from src.rag import get_retriever, RAGRetriever
 
 
 def run(state: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Execute the Definition Agent.
+    Execute the Definition Agent with RAG-augmented context.
     
     Args:
         state: Current orchestrator state with user_question
@@ -96,20 +40,47 @@ def run(state: Dict[str, Any]) -> Dict[str, Any]:
             }
         }
     
-    # Build context
-    schema_context = get_schema_context()
-    metrics_context = get_metrics_context()
+    # --- RAG: Retrieve relevant context ---
+    try:
+        retriever = get_retriever()
+        rag_result = retriever.retrieve_for_definition(question)
+        rag_context = rag_result.get_context_string(max_chunks=8)
+        rag_metadata = rag_result.get_metadata_summary()
+    except Exception as e:
+        # If RAG fails, continue without context
+        rag_context = ""
+        rag_metadata = {"error": str(e)}
     
-    system_prompt = SYSTEM_PROMPT.format(
-        schema_context=schema_context,
-        metrics_context=metrics_context
-    )
+    # Get composed prompt (system + schema + agent-specific)
+    system_prompt = AgentPrompts.definition()
     
-    user_prompt = f"""Analyze this question and provide a structured definition:
+    # Build user prompt with RAG context
+    user_prompt = f"""Analyze this analytics question and provide a structured definition.
 
-Question: "{question}"
+## Retrieved Context (from knowledge base)
+{rag_context if rag_context else "(No additional context retrieved)"}
 
-Return your analysis as JSON."""
+## User Question
+"{question}"
+
+## Instructions
+- Use the retrieved context to inform your interpretation
+- Apply privacy-safe defaults (no customer/account IDs in output)
+- Default to monthly trend if no time range specified
+- Map business terms to the correct columns and filters
+- If the question asks about a term defined in the context, use that definition
+
+Return your analysis as JSON with the following structure:
+{{
+    "interpretation": "plain English description of what the user wants",
+    "metrics": ["list of metrics to calculate"],
+    "dimensions": ["list of dimensions to group by"],
+    "filters": {{"column": "condition"}},
+    "time_grain": "month/day/week/quarter",
+    "privacy_note": "any privacy concerns or notes",
+    "assumptions": ["assumptions made about ambiguous parts"],
+    "confidence": "high/medium/low"
+}}"""
     
     # Call LLM
     try:
@@ -124,7 +95,6 @@ Return your analysis as JSON."""
         result = response.to_json()
         
         if result is None:
-            # Try to extract from content
             result = {
                 "interpretation": response.content,
                 "parse_error": "Could not parse JSON response"
@@ -132,6 +102,7 @@ Return your analysis as JSON."""
         
         # Add metadata
         result["_tokens"] = response.usage
+        result["_rag_metadata"] = rag_metadata
         
         return {"definition_result": result}
         
@@ -144,13 +115,32 @@ Return your analysis as JSON."""
         }
 
 
+def get_definition_only(question: str) -> Dict[str, Any]:
+    """
+    Get definition for a question without full pipeline.
+    
+    Useful for testing or standalone use.
+    
+    Args:
+        question: User question
+        
+    Returns:
+        Definition result dict
+    """
+    result = run({"user_question": question})
+    return result.get("definition_result", {})
+
+
 if __name__ == "__main__":
     # Test the agent
     test_questions = [
+        "What is net flow?",  # Should retrieve glossary definition
         "What's the total deposit amount by channel?",
         "Show me the monthly trend of withdrawals",
-        "How many transactions did digital customers make?",
+        "List top customers by transaction count",  # Should flag privacy concern
     ]
+    
+    print("Testing Definition Agent with RAG...\n")
     
     for q in test_questions:
         print(f"\n{'='*60}")
@@ -161,6 +151,11 @@ if __name__ == "__main__":
         definition = result["definition_result"]
         
         print(f"Interpretation: {definition.get('interpretation', 'N/A')}")
-        print(f"Metric: {definition.get('metric', 'N/A')}")
-        print(f"Dimensions: {definition.get('dimensions', [])}")
-        print(f"Filters: {definition.get('filters', [])}")
+        print(f"Metrics: {definition.get('metrics', 'N/A')}")
+        print(f"Dimensions: {definition.get('dimensions', 'N/A')}")
+        print(f"Privacy note: {definition.get('privacy_note', 'N/A')}")
+        print(f"Confidence: {definition.get('confidence', 'N/A')}")
+        
+        # Show RAG metadata
+        rag_meta = definition.get('_rag_metadata', {})
+        print(f"\nRAG Retrieved: {rag_meta.get('total_knowledge', 0)} knowledge, {rag_meta.get('total_schema', 0)} schema chunks")

@@ -3,8 +3,8 @@
 Run Eval: Execute evaluation suite and output metrics.
 
 Usage:
-    python apps/run_eval.py
-    python apps/run_eval.py --questions eval_questions.json
+    python src/apps/run_eval.py
+    python src/apps/run_eval.py --questions eval_questions.json
 """
 
 import argparse

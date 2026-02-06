@@ -43,7 +43,7 @@ Each agent has a clearly bounded responsibility:
   Interprets metrics, dimensions, and analytical intent.
 
 - **SQL Agent**  
-  Generates and executes analytical queries within approved constraints. In Phase 2 (separate repo), this becomes an orchestrated SQL engine: its own orchestrator plans then executes by calling domain specialist sub-agents (e.g. Digital Marketing, Transaction, Customer, Campaign) as tools and passing results between them.
+  Generates and executes analytical queries within approved constraints. In Phase 2 (separate repo), this becomes an orchestrated SQL engine: its own orchestrator plans then executes by calling domain specialist sub-agents as tools and passing results between them.
 
 - **Data Quality Agent**  
   Performs basic validation and anomaly checks on results.
@@ -51,8 +51,11 @@ Each agent has a clearly bounded responsibility:
 - **Explanation Agent**  
   Translates analytical outputs into business-readable insights.
 
-- **RAG Tool (Optional)**  
-  Provides lightweight knowledge grounding when additional context is required.
+- **RAG Module**  
+  Provides retrieval-augmented generation using ChromaDB vector store.
+  - Indexes business glossary, metrics, and schema definitions
+  - Retrieves relevant context for each agent
+  - Enables history-based similarity search for past queries
 
 Agents do not call each other directly — all coordination flows through the Orchestrator.
 
@@ -76,12 +79,62 @@ Agents do not call each other directly — all coordination flows through the Or
 
 ---
 
+## Quick Start
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Set up environment
+cp .env.example .env
+# Edit .env with your OPENAI_API_KEY
+
+# Run a query
+python main.py "What is the total deposit amount by channel?"
+
+# Interactive mode
+python main.py -i
+
+# Launch web UI
+streamlit run src/apps/streamlit_app.py
+```
+
+---
+
+## Demo
+
+The project includes 13 demo scenarios showcasing all capabilities:
+
+```bash
+# Terminal: Run all demos
+python src/apps/run_demo.py
+
+# Terminal: Interactive mode (pause between demos)
+python src/apps/run_demo.py --interactive
+
+# Web UI: Launch Streamlit app
+streamlit run src/apps/streamlit_app.py
+```
+
+| Part | Focus | Demos |
+|------|-------|-------|
+| 1-3 | Core Analytics | SQL + RAG schema context, explanations |
+| 4-5 | RAG Knowledge | Definition queries using ChromaDB retrieval |
+| 6-10 | Safety | K-anonymity, scope guard, privacy refusals |
+| 11-13 | End-to-End | Full LangChain + RAG pipeline |
+
+See [docs/DEMO.md](./docs/DEMO.md) for the complete demo guide.
+
+---
+
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
 | [STRUCTURE.md](./STRUCTURE.md) | Folder and file organization |
-| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | System architecture and flowcharts |
+| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | System architecture and design |
+| [docs/DEMO.md](./docs/DEMO.md) | Demo guide with 12 scenarios |
+| [docs/DIAGRAMS.md](./docs/DIAGRAMS.md) | Visual workflow diagrams |
 | [docs/ROADMAP.md](./docs/ROADMAP.md) | Phased development plan (Phase 1–4) |
 
 ---
@@ -92,8 +145,11 @@ Agents do not call each other directly — all coordination flows through the Or
 | Layer | Tool |
 |-------|------|
 | Orchestration | **LangGraph** (LangChain) |
-| LLM | OpenAI / Anthropic / Gemini (pluggable) |
+| LLM | **LangChain + OpenAI** (gpt-4o-mini) |
+| Embeddings | **OpenAI** (text-embedding-3-small) |
+| Vector DB | **ChromaDB** (persistent local storage) |
 | SQL Engine | **DuckDB** (local, reads CSV) |
+| Query History | **SQLite** (query_logs.db) |
 | Language | Python 3.11+ |
 | Testing | pytest |
 | CI/CD | GitHub Actions |
@@ -133,7 +189,15 @@ Logging all agent decisions for traceability and compliance.
 
 ## Status
 
-<!-- Fill in manually: current phase, progress, or next steps -->
+**Phase 1: Complete** ✅
+
+- ✅ Multi-agent orchestration (LangGraph)
+- ✅ LangChain LLM abstraction (`ChatOpenAI`)
+- ✅ RAG integration (ChromaDB + OpenAI embeddings)
+- ✅ Vector similarity search for past queries
+- ✅ 13 enterprise demo scenarios
+- ✅ Self-evaluation and user feedback system
+- ✅ Streamlit UI + terminal demo runner
 
 ---
 

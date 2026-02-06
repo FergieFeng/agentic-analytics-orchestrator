@@ -3,15 +3,23 @@ python-dotenv>=1.0.0
 
 # LLM & Orchestration
 langchain>=0.3.0
+langchain-openai>=0.2.0
+langchain-chroma>=0.1.0
 langgraph>=0.2.0
 openai>=1.0.0
 anthropic>=0.30.0
+
+# Vector Database & RAG
+chromadb>=0.4.0
 
 # SQL (local, no database setup needed)
 duckdb>=1.0.0
 
 # Data
 pandas>=2.0.0
+
+# UI
+streamlit>=1.30.0
 
 # Testing
 pytest>=8.0.0

@@ -3,8 +3,8 @@
 Scaffold Agent: Generate a new specialist agent folder structure.
 
 Usage:
-    python apps/scaffold_agent.py --name "new_agent"
-    python apps/scaffold_agent.py --name "campaign_agent" --description "Campaign analytics"
+    python src/apps/scaffold_agent.py --name "new_agent"
+    python src/apps/scaffold_agent.py --name "campaign_agent" --description "Campaign analytics"
 """
 
 import argparse

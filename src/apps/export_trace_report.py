@@ -3,7 +3,7 @@
 Export Trace Report: Convert agent traces to Markdown report.
 
 Usage:
-    python apps/export_trace_report.py --input traces.json --output report.md
+    python src/apps/export_trace_report.py --input traces.json --output report.md
 """
 
 import argparse

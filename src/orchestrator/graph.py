@@ -4,8 +4,9 @@ LangGraph state machine for the orchestrator.
 This is the main entry point that defines the agent workflow.
 """
 
-from typing import Dict, Any, Literal
+from typing import Dict, Any, Literal, Optional
 from datetime import datetime
+import time
 
 from langgraph.graph import StateGraph, END
 
@@ -16,6 +17,9 @@ from src.specialists.definition_agent import agent as definition_agent
 from src.specialists.sql_agent import agent as sql_agent
 from src.specialists.data_quality_agent import agent as data_quality_agent
 from src.specialists.explanation_agent import agent as explanation_agent
+from src.evaluation.logger import SessionLogger
+from src.evaluation.self_eval import evaluate_response
+from src.evaluation.query_store import get_query_store
 
 
 # --- Node Functions ---
@@ -246,21 +250,57 @@ def get_graph():
     return _graph
 
 
-def run_query(question: str) -> Dict[str, Any]:
+def run_query(question: str, enable_logging: bool = True) -> Dict[str, Any]:
     """
     Run a query through the orchestrator.
     
     Args:
         question: User's analytics question
+        enable_logging: Whether to log the session (default True)
         
     Returns:
-        Final state with all results
+        Final state with all results, including:
+        - session_id: Unique identifier for this query
+        - self_scores: Automatic quality evaluation
     """
     graph = get_graph()
     initial_state = create_initial_state(question)
     
+    # Start logging session
+    session_logger = None
+    if enable_logging:
+        session_logger = SessionLogger.start(question)
+    
     # Run the graph
+    start_time = time.time()
     final_state = graph.invoke(initial_state)
+    elapsed_ms = (time.time() - start_time) * 1000
+    
+    # Self-evaluation
+    eval_result = evaluate_response(final_state)
+    final_state["self_scores"] = eval_result.to_dict()
+    final_state["confidence"] = eval_result.confidence
+    
+    # Finish logging and save to database
+    session_id = None
+    if session_logger:
+        session = SessionLogger.get_current()
+        if session:
+            session.self_scores = eval_result.to_dict()
+            session.total_duration_ms = elapsed_ms
+            session_logger.finish(final_state)
+            
+            # Save to query store
+            try:
+                store = get_query_store()
+                store.save_session(session)
+                session_id = session.session_id
+            except Exception as e:
+                # Don't fail the query due to logging issues
+                pass
+    
+    # Add session_id to state for feedback collection
+    final_state["session_id"] = session_id
     
     return final_state
 

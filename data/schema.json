@@ -1,6 +1,24 @@
 {
   "table_name": "sample_events",
-  "description": "Event-level transactional data for banking products",
+  "description": "Event-level transactional data for deposit banking products (CHEQUING/SAVINGS/GIC).",
+  "query_hints": {
+    "default_time_grain": "month",
+    "default_time_window_if_unspecified": "all_available",
+    "privacy": {
+      "no_identifier_output": true,
+      "k_anonymity_min_distinct_accounts": 10,
+      "disallow_row_level_outputs": true
+    },
+    "cost_controls": {
+      "distinct_value_limit": 50,
+      "result_row_limit": 200
+    },
+    "value_discovery": {
+      "enabled": true,
+      "strategy": "select_distinct",
+      "notes": "Use SELECT DISTINCT on categorical columns with LIMIT when enums are incomplete or high-cardinality."
+    }
+  },
   "columns": [
     {
       "name": "event_id",
@@ -31,23 +49,40 @@
       "name": "product_type",
       "type": "STRING",
       "description": "Account product type",
+      "semantic_role": "dimension",
+      "is_categorical": true,
+      "recommended_operations": ["filter", "group_by"],
+      "value_discovery": {"enabled": true, "method": "SELECT DISTINCT", "limit": 10},
       "enum": ["CHEQUING", "SAVINGS", "GIC"]
     },
     {
       "name": "event_type",
       "type": "STRING",
       "description": "Event category",
+      "semantic_role": "dimension",
+      "is_categorical": true,
+      "recommended_operations": ["filter", "group_by"],
+      "value_discovery": {"enabled": true, "method": "SELECT DISTINCT", "limit": 20},
       "enum": ["money_movement", "interest", "fee", "account_status", "gic_lifecycle", "service_action"]
     },
     {
       "name": "event_name",
       "type": "STRING",
-      "description": "Detailed action name"
+      "description": "Detailed action name",
+      "semantic_role": "dimension",
+      "is_categorical": true,
+      "recommended_operations": ["filter", "group_by"],
+      "high_cardinality": true,
+      "value_discovery": {"enabled": true, "method": "SELECT DISTINCT", "limit": 50, "notes": "High-cardinality. Prefer filtering with LIKE/IN on a small discovered set rather than enumerating all values."}
     },
     {
       "name": "channel",
       "type": "STRING",
       "description": "Transaction channel",
+      "semantic_role": "dimension",
+      "is_categorical": true,
+      "recommended_operations": ["filter", "group_by"],
+      "value_discovery": {"enabled": true, "method": "SELECT DISTINCT", "limit": 10},
       "enum": ["DIGITAL", "BRANCH", "CALL_CENTER", "BATCH"]
     },
     {
@@ -59,7 +94,11 @@
     {
       "name": "currency",
       "type": "STRING",
-      "description": "Currency code (e.g., CAD)"
+      "description": "Currency code (e.g., CAD)",
+      "semantic_role": "dimension",
+      "is_categorical": true,
+      "recommended_operations": ["filter", "group_by"],
+      "value_discovery": {"enabled": true, "method": "SELECT DISTINCT", "limit": 10}
     },
     {
       "name": "balance_after",
@@ -99,6 +138,8 @@
   "notes": [
     "Negative amounts: Withdrawals and payments have negative event_amount",
     "NULL amounts: Non-monetary events (account_status, some service_actions) have NULL event_amount",
-    "One row per event: Each row is a single event; one transaction may generate multiple events"
+    "One row per event: Each row is a single event; one transaction may generate multiple events",
+    "Categorical columns (dimensions) are intended for filtering and grouping: product_type, event_type, event_name, channel, currency.",
+    "If enums are incomplete, agents may run SELECT DISTINCT <column> with a LIMIT (see query_hints.cost_controls.distinct_value_limit)."
   ]
 }

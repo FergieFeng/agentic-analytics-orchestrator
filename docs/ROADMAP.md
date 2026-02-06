@@ -4,15 +4,26 @@ Overall idea: one vision for governed, multi-agent analytics — then **split in
 
 ---
 
-## Phase 1 · This Repo
+## Phase 1 · This Repo ✅
 
 **Repository:** `agentic-analytics-orchestrator` (this repo)
 
-**Focus:** Orchestrator + multi-agent collaboration.
+**Focus:** Orchestrator + multi-agent collaboration + **RAG integration**.
 
-Design a governed multi-agent system where an orchestrator coordinates specialist agents to handle ambiguous analytics problems.
+Design a governed multi-agent system where an orchestrator coordinates specialist agents to handle ambiguous analytics problems. **Now includes LangChain integration and RAG for knowledge retrieval.**
 
-**Stack:** Python, LangGraph, DuckDB (local CSV), OpenAI/Anthropic (pluggable LLM).
+**Stack:**
+- Python, LangGraph, DuckDB (local CSV)
+- **LangChain** (`ChatOpenAI`, `PromptTemplate`)
+- **RAG**: ChromaDB + OpenAI Embeddings (`text-embedding-3-small`)
+- SQLite (query history)
+
+**Implemented:**
+- ✅ Multi-agent orchestration (Definition, SQL, Quality, Explanation)
+- ✅ LangChain LLM abstraction
+- ✅ RAG retrieval from indexed knowledge and schema
+- ✅ Vector similarity search for past queries
+- ✅ Self-evaluation and user feedback
 
 ---
 
@@ -38,9 +49,15 @@ So: same orchestration pattern as Phase 1, applied inside the SQL boundary. Anal
 
 **Repository:** `agentic-rag-analytics`
 
-**Focus:** RAG for analytics grounding.
+**Focus:** **Advanced RAG** for analytics grounding.
 
-Use embeddings and retrieval to ground analytics in schema, metrics, and business knowledge.
+Build on Phase 1's basic RAG (ChromaDB + OpenAI) with enterprise-scale retrieval:
+- Multi-modal embeddings (text + tables)
+- Hybrid search (semantic + keyword)
+- Cross-document reasoning
+- Dynamic schema updates
+
+*Note: Basic RAG is already integrated in Phase 1 (ChromaDB + OpenAI embeddings). Phase 3 focuses on production-scale, GCP-native RAG.*
 
 **Stack:** Python, Vertex AI Embeddings, Vector DB (Pinecone / Weaviate / AlloyDB), BigQuery.
 
@@ -60,14 +77,14 @@ Extend agents from "answering questions" to executing repeatable business workfl
 
 ## Summary
 
-| Phase | Repo | Focus |
-|-------|------|--------|
-| 1 | agentic-analytics-orchestrator | Orchestrator + multi-agent collaboration |
-| 2 | agentic-sql-engine | Multi-agent SQL engine (orchestrator + specialists, plan-then-execute) |
-| 3 | agentic-rag-analytics | RAG for analytics grounding |
-| 4 (optional) | agentic-analytics-workflows | Agent-driven workflows |
+| Phase | Repo | Focus | Status |
+|-------|------|--------|--------|
+| 1 | agentic-analytics-orchestrator | Orchestrator + multi-agent + LangChain + basic RAG | ✅ Complete |
+| 2 | agentic-sql-engine | Multi-agent SQL (orchestrator + specialists, plan-then-execute) | 🔜 Next |
+| 3 | agentic-rag-analytics | Advanced RAG (production-scale, GCP-native) | Planned |
+| 4 (optional) | agentic-analytics-workflows | Agent-driven workflows | Future |
 
-Phases 1–3 are the active sequence to finish; Phase 4 is optional and later.
+Phases 1–3 are the active sequence; Phase 4 is optional and later.
 
 ---
 

@@ -18,7 +18,7 @@ This doc provides flowcharts for (1) the overall multi-phase design and (2) Phas
 
 Top level: main Orchestrator (Hub). One of its sub-agents, SQL, is deepened in Phase 2 into a **sub-hub** with its own orchestrator and specialists. RAG can be deepened similarly in Phase 3.
 
-**Phase 1 layer (this repo) — parallel agents:**
+**Phase 1 layer (this repo) — parallel agents with RAG:**
 
 ```
               User Question
@@ -27,6 +27,7 @@ Top level: main Orchestrator (Hub). One of its sub-agents, SQL, is deepened in P
           ┌─────────────────────┐
           │     Orchestrator    │
           │ (intent & routing)  │
+          │   [LangGraph]       │
           └──────────┬──────────┘
                      │
      ┌───────┬───────┼───────┬───────┐
@@ -34,9 +35,10 @@ Top level: main Orchestrator (Hub). One of its sub-agents, SQL, is deepened in P
      ▼       ▼       ▼       ▼       ▼
 ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
 │ Definition │ │    SQL     │ │   Data     │ │ Explanation│ │    RAG     │
-│   Agent    │ │   Agent    │ │  Quality   │ │   Agent    │ │   Tool     │
-│(metric &   │ │(query &    │ │   Agent    │ │(business   │ │(knowledge  │
-│ meaning)   │ │ execution) │ │(validation │ │ insights)  │ │ grounding) │
+│   Agent    │ │   Agent    │ │  Quality   │ │   Agent    │ │   Module   │
+│  + RAG     │ │  + RAG     │ │   Agent    │ │(business   │ │ (ChromaDB) │
+│(metric &   │ │(query &    │ │(validation │ │ insights)  │ │ Integrated │
+│ meaning)   │ │ execution) │ │ & anomaly) │ │            │ │            │
 └────────────┘ └────┬───────┘ └────────────┘ └────────────┘ └────────────┘
                     │
                     │  Phase 2: SQL becomes a sub-hub
@@ -63,7 +65,7 @@ Top level: main Orchestrator (Hub). One of its sub-agents, SQL, is deepened in P
 
 ## 2. Phase 1 Only (This Repo)
 
-Single level: one Orchestrator, simple specialist agents in **parallel**. No sub-hubs.
+Single level: one Orchestrator, simple specialist agents in **parallel**. No sub-hubs. **RAG is now integrated** into Definition and SQL agents via ChromaDB vector retrieval.
 
 ```
               User Question
@@ -72,6 +74,7 @@ Single level: one Orchestrator, simple specialist agents in **parallel**. No sub
           ┌─────────────────────┐
           │     Orchestrator    │
           │ (intent & routing)  │
+          │   [LangGraph]       │
           └──────────┬──────────┘
                      │
      ┌───────┬───────┼───────┬───────┐
@@ -79,14 +82,26 @@ Single level: one Orchestrator, simple specialist agents in **parallel**. No sub
      ▼       ▼       ▼       ▼       ▼
 ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
 │ Definition │ │    SQL     │ │   Data     │ │ Explanation│ │    RAG     │
-│   Agent    │ │   Agent    │ │  Quality   │ │   Agent    │ │   Tool     │
-│(metric &   │ │  (simple)  │ │   Agent    │ │(business   │ │(knowledge  │
-│ meaning)   │ │(query &    │ │(validation │ │ insights)  │ │ grounding) │
-│            │ │ execution) │ │ & anomaly) │ │            │ │ (optional) │
+│   Agent    │ │   Agent    │ │  Quality   │ │   Agent    │ │   Module   │
+│  + RAG ◄───┼─┼──► + RAG ◄─┼─┼────────────┼─┼────────────┼─┼─► ChromaDB │
+│(metric &   │ │(query &    │ │(validation │ │(business   │ │  (vector   │
+│ meaning)   │ │ execution) │ │ & anomaly) │ │ insights)  │ │  storage)  │
 └────────────┘ └────────────┘ └────────────┘ └────────────┘ └────────────┘
 ```
 
+### Key Technologies (Phase 1)
+
+| Component | Technology |
+|-----------|------------|
+| Orchestration | LangGraph (state machine) |
+| LLM Client | LangChain `ChatOpenAI` |
+| Embeddings | OpenAI `text-embedding-3-small` |
+| Vector DB | ChromaDB (persistent local) |
+| SQL Engine | DuckDB (reads CSV) |
+| Query History | SQLite |
+
 - Orchestrator decides **which** agents to call and **in what order**; agents are the parallel specialists below.
 - Each agent is **simple** (no nested multi-agent in Phase 1).
+- **RAG is integrated**: Definition and SQL agents retrieve context from ChromaDB before LLM calls.
 - All coordination flows through the Orchestrator; agents do not call each other directly.
 - Orchestrator passes context/results to the next agent as needed.

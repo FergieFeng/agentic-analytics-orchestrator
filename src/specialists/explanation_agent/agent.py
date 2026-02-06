@@ -4,7 +4,9 @@ Explanation Agent: Generates business insights from query results.
 Responsibilities:
 - Synthesize results into plain English
 - Highlight key insights and trends
+- Document assumptions made
 - Provide business context
+- Note any privacy suppressions
 """
 
 import json
@@ -12,50 +14,7 @@ from typing import Dict, Any, List
 from pathlib import Path
 
 from src.config.llm import get_llm_client
-from src.tools.schema_tool import get_glossary, get_business_rules
-
-
-SYSTEM_PROMPT = """You are the Explanation Agent for a banking analytics system.
-
-Your job is to explain query results in clear, business-friendly language.
-
-## Business Context
-
-{business_rules}
-
-## Your Task
-
-Given:
-1. The original question
-2. The SQL query that was run
-3. The query results
-4. Data quality notes
-
-Generate a clear, concise explanation that:
-1. Directly answers the user's question
-2. Highlights key insights from the data
-3. Notes any important caveats or limitations
-4. Suggests follow-up questions if relevant
-
-## Output Format
-
-Return a JSON object:
-```json
-{{
-  "summary": "One sentence answer to the question",
-  "insights": ["Key insight 1", "Key insight 2"],
-  "caveats": ["Any data limitations or notes"],
-  "follow_up_questions": ["Suggested follow-up question"]
-}}
-```
-
-## Style Guidelines
-
-- Be concise but informative
-- Use business terminology appropriately
-- Format numbers clearly (e.g., "$45,230" not "45230.00")
-- Compare to benchmarks or trends when possible
-- Don't just repeat the data - interpret it"""
+from src.config.prompts import AgentPrompts
 
 
 def run(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -70,26 +29,52 @@ def run(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     question = state.get("user_question", "")
     sql_query = state.get("sql_query", "")
-    sql_result = state.get("sql_result", {})
-    quality_result = state.get("quality_result", {})
+    sql_result = state.get("sql_result") or {}
+    quality_result = state.get("quality_result") or {}
     sql_explanation = state.get("sql_explanation", "")
     
     # Handle missing results
     if not sql_result or not sql_result.get("data"):
+        # Check if this is due to privacy filtering
+        has_data_check = next(
+            (c for c in quality_result.get("checks", []) if c.get("name") == "has_data"),
+            {}
+        )
+        likely_cause = has_data_check.get("details", {}).get("likely_cause", "")
+        
+        if likely_cause == "k_anonymity_filter":
+            return {
+                "explanation": {
+                    "summary": "This breakdown cannot be shown due to privacy protection requirements.",
+                    "insights": [
+                        "The requested data exists but involves too few accounts to report safely.",
+                        "Our privacy policy requires at least 5 distinct accounts per data bucket."
+                    ],
+                    "caveats": [
+                        "Some data was suppressed to protect individual privacy.",
+                        "This is not an error - it's a privacy safeguard."
+                    ],
+                    "assumptions": [],
+                    "follow_up_questions": [
+                        "Try a broader aggregation (e.g., quarterly totals instead of monthly)",
+                        "Ask for overall totals without dimensional breakdowns",
+                        "Combine with other categories that have more data"
+                    ]
+                }
+            }
+        
         return {
             "explanation": {
                 "summary": "Unable to generate results for this question.",
                 "insights": [],
                 "caveats": ["The query returned no data or encountered an error."],
+                "assumptions": [],
                 "follow_up_questions": ["Try rephrasing your question or checking the date range."]
             }
         }
     
-    # Build context
-    business_rules = get_business_rules()
-    rules_text = "\n".join(f"- {rule}" for rule in business_rules)
-    
-    system_prompt = SYSTEM_PROMPT.format(business_rules=rules_text)
+    # Get composed prompt
+    system_prompt = AgentPrompts.explanation()
     
     # Format result data for the prompt
     data = sql_result.get("data", [])
@@ -98,7 +83,13 @@ def run(state: Dict[str, Any]) -> Dict[str, Any]:
     # Limit data shown to LLM
     data_preview = data[:20] if len(data) > 20 else data
     
-    user_prompt = f"""Explain these query results:
+    # Privacy compliance info
+    privacy_info = quality_result.get("privacy_compliance", {})
+    privacy_note = ""
+    if privacy_info.get("concerns"):
+        privacy_note = f"\n\nPrivacy notes: {privacy_info['concerns']}"
+    
+    user_prompt = f"""Explain these query results in business-friendly language.
 
 **Original Question:** "{question}"
 
@@ -115,8 +106,16 @@ def run(state: Dict[str, Any]) -> Dict[str, Any]:
 ```
 
 **Data Quality:** {quality_result.get('status', 'unknown')} - {quality_result.get('message', '')}
+{privacy_note}
 
-Generate a business-friendly explanation as JSON."""
+Remember:
+- Never mention specific customer or account IDs
+- Note any assumptions made (time range, metric definitions)
+- If any data was suppressed for privacy, mention it
+- Format numbers clearly with commas (e.g., 18,504)
+- IMPORTANT: Do NOT use $ for currency - use "USD" or just the number ($ breaks markdown rendering)
+
+Generate a business-friendly explanation as JSON with: summary, insights, caveats, assumptions, follow_up_questions"""
     
     try:
         client = get_llm_client()
@@ -133,6 +132,7 @@ Generate a business-friendly explanation as JSON."""
                 "summary": response.content,
                 "insights": [],
                 "caveats": [],
+                "assumptions": [],
                 "follow_up_questions": []
             }
         
@@ -146,6 +146,7 @@ Generate a business-friendly explanation as JSON."""
                 "summary": f"Error generating explanation: {str(e)}",
                 "insights": [],
                 "caveats": ["An error occurred while processing results."],
+                "assumptions": [],
                 "follow_up_questions": []
             }
         }
@@ -180,19 +181,33 @@ def format_answer(state: Dict[str, Any]) -> str:
             lines.append(f"- {insight}")
         lines.append("")
     
-    # Data table (if small)
+    # Data table (if small and appropriate)
     data = sql_result.get("data", [])
     if data and len(data) <= 10:
         lines.append("**Data:**")
-        # Simple markdown table
         if data:
             cols = list(data[0].keys())
+            
+            # Sort by date/month column if present (ascending)
+            date_cols = [c for c in cols if c in ('month', 'date', 'event_date', 'year', 'quarter', 'week')]
+            if date_cols:
+                sort_col = date_cols[0]
+                data = sorted(data, key=lambda x: str(x.get(sort_col, '')))
+            
             lines.append("| " + " | ".join(cols) + " |")
             lines.append("| " + " | ".join(["---"] * len(cols)) + " |")
             for row in data:
                 values = [str(row.get(c, "")) for c in cols]
                 lines.append("| " + " | ".join(values) + " |")
             lines.append("")
+    
+    # Assumptions
+    assumptions = explanation.get("assumptions", [])
+    if assumptions:
+        lines.append("**Assumptions:**")
+        for assumption in assumptions:
+            lines.append(f"- {assumption}")
+        lines.append("")
     
     # Caveats
     caveats = explanation.get("caveats", [])
@@ -202,11 +217,19 @@ def format_answer(state: Dict[str, Any]) -> str:
             lines.append(f"- {caveat}")
         lines.append("")
     
+    # Privacy warnings
+    privacy_compliance = quality_result.get("privacy_compliance", {})
+    if privacy_compliance.get("concerns"):
+        lines.append("**Privacy Notes:**")
+        lines.append("- Some breakdowns may be suppressed due to privacy thresholds")
+        lines.append("")
+    
     # Quality warnings
     if quality_result.get("status") == "warning":
-        warnings = [c["message"] for c in quality_result.get("checks", []) if c["status"] == "warning"]
+        warnings = [c["message"] for c in quality_result.get("checks", []) 
+                   if c["status"] == "warning" and "privacy" not in c["name"].lower()]
         if warnings:
-            lines.append("**Data Quality Warnings:**")
+            lines.append("**Data Quality Notes:**")
             for w in warnings:
                 lines.append(f"- ⚠️ {w}")
             lines.append("")
@@ -231,26 +254,20 @@ if __name__ == "__main__":
             "data": [
                 {"channel": "DIGITAL", "total": 95000.50},
                 {"channel": "BRANCH", "total": 45000.00},
-                {"channel": "BATCH", "total": 12000.25}
             ],
             "columns": ["channel", "total"],
-            "row_count": 3
+            "row_count": 2
         },
         "quality_result": {
             "status": "pass",
-            "message": "All checks passed"
+            "message": "All checks passed",
+            "privacy_compliance": {"k_anonymity_met": True, "concerns": []}
         }
     }
     
     print("Testing Explanation Agent...")
-    print(f"Question: {test_state['user_question']}")
-    print()
     
     result = run(test_state)
     
-    print("Explanation:")
-    print(json.dumps(result["explanation"], indent=2))
-    print()
-    
-    print("Formatted Answer:")
+    print("\nFormatted Answer:")
     print(format_answer({**test_state, **result}))

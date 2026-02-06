@@ -3,9 +3,9 @@
 Generate Schema Doc: Create schema.md from CSV or schema.json.
 
 Usage:
-    python apps/generate_schema_doc.py
-    python apps/generate_schema_doc.py --source data/sample_events.csv
-    python apps/generate_schema_doc.py --from-json src/config/schema.json
+    python src/apps/generate_schema_doc.py
+    python src/apps/generate_schema_doc.py --source data/sample_events.csv
+    python src/apps/generate_schema_doc.py --from-json src/config/schema.json
 """
 
 import argparse
